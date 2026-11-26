@@ -73,5 +73,24 @@ stopNarration=function(){audioToken++;if(activeAudio){activeAudio.pause();active
 speak=function(i,preview=false){stopNarration();if(!$('voice').checked&&!preview)return;const a=recorded[i];if(a.error||!Number.isFinite(a.duration)||a.duration<=0){originalSpeak(i,preview);return;}const token=audioToken;activeAudio=a;a.currentTime=preview?0:Math.min(a.duration,Math.max(0,t-starts[i]));speechPending=!preview;a.onended=()=>{if(token===audioToken){speechPending=false;activeAudio=null;last=0}};a.play().catch(()=>{if(token===audioToken){activeAudio=null;originalSpeak(i,preview);}});};
 $('voiceRate').value='.8';
 
+
+const master=new Audio('assets/voice/narration.mp3');
+master.preload='auto';
+const pick=document.createElement('input');pick.type='file';pick.accept='audio/*';pick.hidden=true;document.body.append(pick);
+const masterBtn=document.createElement('button');masterBtn.textContent='تحميل التسجيل الصوتي الكامل';$('record').after(masterBtn);masterBtn.onclick=()=>pick.click();
+let masterURL=null,ctx=null,source=null,dest=null,exporting=false;
+const boundaries=[0,7.52,18,23.39,31.44,38.84,45.62,53,64.91425];
+function masterTiming(){if(!Number.isFinite(master.duration))return;const scale=master.duration/64.91425;data.forEach((d,i)=>{starts[i]=boundaries[i]*scale;d[1]=(boundaries[i+1]-boundaries[i])*scale});total=master.duration+3;data[7][1]+=3;$('seek').max=total;if(ready)render();}
+master.addEventListener('loadedmetadata',masterTiming);
+pick.onchange=()=>{if(!pick.files[0])return;setPlay(false);if(masterURL)URL.revokeObjectURL(masterURL);masterURL=URL.createObjectURL(pick.files[0]);master.src=masterURL;master.load();$('status').textContent='تم اختيار التسجيل الكامل';};
+const oldRender=render;render=function(){oldRender();x.save();x.direction='ltr';x.textAlign='left';x.font='bold 27px Arial';x.fillStyle='rgba(255,255,255,.85)';x.fillText('Amine Boumiza',40,55);if(Number.isFinite(master.duration)&&t>=master.duration){x.fillStyle='#101215';x.fillRect(0,0,W,H);x.textAlign='center';x.fillStyle='#efce91';x.font='bold 58px Arial';x.fillText('Amine Boumiza',W/2,H/2);x.font='30px Arial';x.fillText('طريق التوبة',W/2,H/2+75);}x.restore();};
+const prevSpeak=speak,prevStop=stopNarration,prevPlay=setPlay,prevJump=jump;
+speak=function(i,p=false){if(Number.isFinite(master.duration))return;prevSpeak(i,p)};
+stopNarration=function(){prevStop();master.pause()};
+setPlay=function(b){prevPlay(b);if(b&&Number.isFinite(master.duration)&&t<master.duration){master.currentTime=t;master.play().catch(e=>{$('status').textContent=e.message;});}};
+jump=function(v){prevJump(v);if(Number.isFinite(master.duration)){master.currentTime=Math.min(v,master.duration);if(playing&&v<master.duration)master.play().catch(()=>{});}};
+$('record').textContent='تحميل الفيديو الكامل بالصوت';
+$('record').onclick=async()=>{if(!ready||!Number.isFinite(master.duration)){ $('status').textContent='حمّل التسجيل الصوتي الكامل أولاً';return;}try{setPlay(false);jump(0);ctx=ctx||new AudioContext();await ctx.resume();if(!source){source=ctx.createMediaElementSource(master);source.connect(ctx.destination);}dest=ctx.createMediaStreamDestination();source.connect(dest);const stream=c.captureStream(30);dest.stream.getAudioTracks().forEach(a=>stream.addTrack(a));const mime=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported(m));rec=new MediaRecorder(stream,mime?{mimeType:mime}:{});chunks=[];rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};rec.onstop=()=>{source.disconnect(dest);const u=URL.createObjectURL(new Blob(chunks,{type:rec.mimeType}));const a=document.createElement('a');a.href=u;a.download='Eltawba-Amine-Boumiza.webm';a.click();setTimeout(()=>URL.revokeObjectURL(u),30000);$('status').textContent='تم تصدير الفيديو بالصوت';};rec.start();setPlay(true);}catch(e){$('status').textContent='تعذر التصدير: '+e.message;}};
+
 Promise.all([...imgs.map(im=>im.decode()),hdReady]).then(()=>{ready=true;render()}).catch(()=>{$('status').textContent='تعذر تحميل الصور. تأكد من استخراج كامل المجلد.'});requestAnimationFrame(loop);
 </script></html>
